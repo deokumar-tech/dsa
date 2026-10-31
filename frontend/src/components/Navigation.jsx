@@ -1,42 +1,84 @@
-import { NavLink } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
+import { CarIcon } from './ui'
 
 const navigationItems = [
   { label: 'Home', to: '/' },
   { label: 'Dashboard', to: '/dashboard' },
   { label: 'Dealers', to: '/dealers' },
-  { label: 'Cohort', to: '/cohort/cohort-1' },
+  { label: 'Cohort', to: '/cohort/cohort-1', section: '/cohort/' },
 ]
 
-export default function Navigation() {
-  return (
-    <header className="border-b border-slate-800 bg-slate-950/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <NavLink to="/" className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-violet-500 font-black text-lg text-white">
-            C
-          </div>
-          <div>
-            <p className="text-xl font-bold tracking-tight text-white">CarCollective</p>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Group buying</p>
-          </div>
-        </NavLink>
+function NavigationLinks({ onNavigate }) {
+  const location = useLocation()
 
-        <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
-          {navigationItems.map((item) => (
-            <NavLink
-              key={item.label}
-              to={item.to}
-              className={({ isActive }) => `transition hover:text-cyan-300 ${isActive ? 'text-cyan-300' : ''}`}
-            >
-              {item.label}
-            </NavLink>
-          ))}
+  return navigationItems.map((item) => {
+    const active = item.section
+      ? location.pathname.startsWith(item.section)
+      : location.pathname === item.to
+
+    return (
+      <NavLink
+        key={item.label}
+        to={item.to}
+        end={!item.section}
+        onClick={onNavigate}
+        className={`nav-link ${active ? 'active' : ''}`}
+        aria-current={active ? 'page' : undefined}
+      >
+        {item.label}
+      </NavLink>
+    )
+  })
+}
+
+export default function Navigation() {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  return (
+    <header className="site-header">
+      <div className="nav-inner">
+        <Link to="/" className="brand-lockup" aria-label="CarCollective home" onClick={() => setMenuOpen(false)}>
+          <span className="brand-mark"><CarIcon className="h-6 w-6" /></span>
+          <span>
+            <span className="brand-name block">CarCollective</span>
+            <span className="brand-subtitle block">Group buying</span>
+          </span>
+        </Link>
+
+        <nav className="site-nav" aria-label="Main navigation">
+          <NavigationLinks />
         </nav>
 
-        <NavLink to="/register" className="rounded-full border border-cyan-400/60 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/20">
-          Join now
-        </NavLink>
+        <div className="nav-actions">
+          <Link to="/register" className="button button-ghost button-small">Join now</Link>
+          <button
+            type="button"
+            className="mobile-menu-button"
+            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
+
+      {menuOpen && (
+        <nav id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation">
+          <NavigationLinks onNavigate={() => setMenuOpen(false)} />
+          <Link to="/register" className="button button-primary mt-2" onClick={() => setMenuOpen(false)}>Join now</Link>
+        </nav>
+      )}
     </header>
   )
 }

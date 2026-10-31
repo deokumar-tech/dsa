@@ -1,128 +1,157 @@
-import { useState } from 'react';
-import { apiUrl } from '../lib/api';
+import { useState } from 'react'
+import { apiUrl } from '../lib/api'
+import { Button, Card } from './ui'
 
 const defaultForm = {
   email: '',
   password: '',
   zipCode: '94105',
-};
+}
 
 export default function AuthForm() {
-  const [mode, setMode] = useState('register');
-  const [form, setForm] = useState(defaultForm);
-  const [status, setStatus] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState('register')
+  const [form, setForm] = useState(defaultForm)
+  const [status, setStatus] = useState('')
+  const [statusTone, setStatusTone] = useState('default')
+  const [zipError, setZipError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const handleChange = (event) => {
-    const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
-  };
+    const { name, value } = event.target
+    setForm((current) => ({ ...current, [name]: value }))
+    if (name === 'zipCode' && zipError) setZipError('')
+  }
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
-    setBusy(true);
-    setStatus('');
+    event.preventDefault()
+    if (mode === 'register' && !/^\d{5}$/.test(form.zipCode)) {
+      setZipError('Enter a valid 5-digit ZIP code.')
+      return
+    }
 
-    const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
-    const requestBody = mode === 'register' ? form : { email: form.email, password: form.password };
+    setBusy(true)
+    setStatus('')
+    setStatusTone('default')
+
+    const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login'
+    const requestBody = mode === 'register' ? form : { email: form.email, password: form.password }
 
     try {
       const response = await fetch(apiUrl(endpoint), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
-      });
-
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.message || 'Request failed');
-      }
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.message || 'Unable to complete your request.')
 
       if (payload.token) {
-        localStorage.setItem('carcollective_token', payload.token);
+        try {
+          window.localStorage.setItem('carcollective_token', payload.token)
+        } catch {
+          throw new Error('Your account is ready, but this browser could not save the sign-in session. Enable browser storage and sign in again.')
+        }
       }
 
       setStatus(
         payload.confirmation_required
           ? 'Account created. Check your email to confirm it before signing in.'
           : `${mode === 'register' ? 'Account created' : 'Welcome back'} successfully.`,
-      );
+      )
     } catch (error) {
-      setStatus(error.message);
+      setStatus(error.message || 'Unable to complete your request.')
+      setStatusTone('error')
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
-  };
+  }
 
   return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-900/75 p-6 shadow-2xl shadow-slate-950/30">
-      <div className="mb-6 flex gap-2 rounded-full border border-slate-700 bg-slate-950 p-1">
+    <Card className="p-6 md:p-7">
+      <div className="mb-6 grid grid-cols-2 gap-1 rounded-full border border-slate-700/70 bg-slate-950/75 p-1">
         {['register', 'login'].map((option) => (
           <button
             key={option}
             type="button"
-            onClick={() => setMode(option)}
-            className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
+            onClick={() => {
+              setMode(option)
+              setStatus('')
+              setZipError('')
+            }}
+            className={`rounded-full px-4 py-2.5 text-sm font-bold transition ${
               mode === option
-                ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white'
+                ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-slate-950 shadow-lg shadow-cyan-500/10'
                 : 'text-slate-300 hover:text-white'
             }`}
+            aria-pressed={mode === option}
           >
-            {option === 'register' ? 'Register' : 'Login'}
+            {option === 'register' ? 'Create account' : 'Sign in'}
           </button>
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <label className="block space-y-2">
-          <span className="text-sm text-slate-300">Email</span>
+      <form onSubmit={handleSubmit} className="form-grid">
+        <label className="field-label">
+          Email
           <input
             type="email"
             name="email"
             value={form.email}
             onChange={handleChange}
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-white outline-none transition focus:border-cyan-400"
+            autoComplete="email"
+            className="field-control"
+            required
           />
         </label>
 
-        <label className="block space-y-2">
-          <span className="text-sm text-slate-300">Password</span>
+        <label className="field-label">
+          Password
           <input
             type="password"
             name="password"
             value={form.password}
             onChange={handleChange}
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-white outline-none transition focus:border-cyan-400"
+            autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+            minLength={8}
+            className="field-control"
+            required
           />
+          <span className="text-xs text-slate-500">Use at least 8 characters.</span>
         </label>
 
         {mode === 'register' && (
-          <label className="block space-y-2">
-            <span className="text-sm text-slate-300">Zip code</span>
+          <label className="field-label">
+            ZIP code
             <input
               type="text"
+              inputMode="numeric"
+              autoComplete="postal-code"
               name="zipCode"
               value={form.zipCode}
-              onChange={handleChange}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-white outline-none transition focus:border-cyan-400"
+              onChange={(event) => {
+                setForm((current) => ({ ...current, zipCode: event.target.value.replace(/\D/g, '').slice(0, 5) }))
+                if (zipError) setZipError('')
+              }}
+              maxLength={5}
+              className="field-control"
+              aria-invalid={Boolean(zipError)}
+              aria-describedby={zipError ? 'auth-zip-error' : undefined}
+              required
             />
+            {zipError && <span id="auth-zip-error" className="field-error" role="alert">{zipError}</span>}
           </label>
         )}
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-3 font-semibold text-white shadow-lg shadow-cyan-500/30 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {busy ? 'Working...' : mode === 'register' ? 'Create account' : 'Sign in'}
-        </button>
+        <Button type="submit" disabled={busy} className="mt-1 w-full">
+          {busy ? 'Please wait…' : mode === 'register' ? 'Create your account' : 'Sign in'}
+        </Button>
       </form>
 
       {status && (
-        <p className="mt-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200">
+        <p className={`mt-4 rounded-xl border px-3 py-3 text-sm ${statusTone === 'error' ? 'border-rose-400/30 bg-rose-950/40 text-rose-100' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-100'}`} role={statusTone === 'error' ? 'alert' : 'status'} aria-live="polite">
           {status}
         </p>
       )}
-    </div>
-  );
+    </Card>
+  )
 }

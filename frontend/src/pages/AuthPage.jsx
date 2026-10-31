@@ -1,18 +1,31 @@
 import AuthForm from '../components/AuthForm'
+import { Badge, Card, Reveal, SparkleIcon } from '../components/ui'
 
 export default function AuthPage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-16">
-      <div className="grid gap-10 lg:grid-cols-[1fr_0.95fr] lg:items-center">
-        <div>
-          <p className="text-sm uppercase tracking-[0.28em] text-cyan-300">Join the buyer network</p>
-          <h1 className="mt-4 text-4xl font-black text-white md:text-5xl">Access your local buying power.</h1>
-          <p className="mt-4 max-w-xl text-lg text-slate-300">
-            Create an account to search nearby inventory, join cohorts, and generate dealership-ready negotiation strategies.
+    <main className="page-main page-enter">
+      <div className="grid gap-8 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+        <Reveal>
+          <Badge><SparkleIcon className="h-4 w-4" /> Join the buyer network</Badge>
+          <h1 className="mt-5 max-w-xl text-4xl font-black tracking-tight text-white md:text-6xl">Access your <span className="text-gradient">local buying power.</span></h1>
+          <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
+            Create an account to search nearby inventory, join a buyer cohort, and prepare a dealership-ready negotiation strategy.
           </p>
-        </div>
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            <Card className="p-4">
+              <p className="m-0 text-lg font-bold text-white">One shared goal</p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">Connect with nearby drivers who want the same vehicle.</p>
+            </Card>
+            <Card className="p-4">
+              <p className="m-0 text-lg font-bold text-white">More informed offers</p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">Compare showroom listings and prepare before you negotiate.</p>
+            </Card>
+          </div>
+        </Reveal>
 
-        <AuthForm />
+        <Reveal delay={100}>
+          <AuthForm />
+        </Reveal>
       </div>
     </main>
   )

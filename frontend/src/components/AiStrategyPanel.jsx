@@ -1,74 +1,77 @@
-export default function AiStrategyPanel({ strategy, loading, onGenerate }) {
+import { Button, Card, Skeleton } from './ui'
+
+function StrategyLoading() {
+  return (
+    <Card className="p-6" aria-live="polite">
+      <p className="eyebrow m-0">AI deal advisor</p>
+      <h3 className="mt-3 text-2xl font-bold text-white">Building your group playbook…</h3>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
+      </div>
+      <Skeleton className="mt-5 h-32" />
+    </Card>
+  )
+}
+
+export default function AiStrategyPanel({ strategy, loading, error, onGenerate }) {
+  if (loading) return <StrategyLoading />
+
   if (!strategy) {
     return (
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-        <p className="text-sm uppercase tracking-[0.24em] text-cyan-300">AI deal advisor</p>
+      <Card className="p-6 md:p-7">
+        <p className="eyebrow m-0">AI deal advisor</p>
         <h3 className="mt-3 text-2xl font-bold text-white">Generate your next negotiation playbook</h3>
-        <button
-          type="button"
-          onClick={onGenerate}
-          disabled={loading}
-          className="mt-6 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {loading ? 'Generating...' : 'Generate Group Negotiation Strategy'}
-        </button>
-      </div>
-    );
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Get a group target, dealer talking points, and an email draft based on your selected vehicle and local listings.</p>
+        {error && <p className="mt-4 rounded-xl border border-rose-400/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-100" role="alert">{error}</p>}
+        <Button type="button" onClick={onGenerate} className="mt-6">Generate group strategy</Button>
+      </Card>
+    )
   }
 
+  const leveragePoints = Array.isArray(strategy.leverage_points) ? strategy.leverage_points : []
+  const targetPrice = Number(strategy.realistic_target_price_per_car)
+
   return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-900/75 p-6">
-      <div className="flex items-center justify-between gap-4">
+    <Card className="p-6 md:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-cyan-300">AI deal advisor</p>
-          <h3 className="mt-3 text-2xl font-bold text-white">Negotiation strategy</h3>
+          <p className="eyebrow m-0">AI deal advisor</p>
+          <h3 className="mt-2 text-2xl font-bold text-white">Your negotiation strategy</h3>
         </div>
-        <button
-          type="button"
-          onClick={onGenerate}
-          className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200"
-        >
-          Refresh
-        </button>
+        <Button type="button" variant="ghost" size="small" onClick={onGenerate}>Refresh strategy</Button>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <article className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Target discount</p>
-          <p className="mt-2 text-3xl font-black text-white">{strategy.target_group_discount_percentage}%</p>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <article className="price-cell">
+          <p className="m-0 text-xs uppercase tracking-[0.16em] text-slate-400">Target group discount</p>
+          <p className="mt-2 text-3xl font-black text-white">{Number(strategy.target_group_discount_percentage) || 0}%</p>
         </article>
-
-        <article className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Target price</p>
-          <p className="mt-2 text-3xl font-black text-white">${Number(strategy.realistic_target_price_per_car).toLocaleString()}</p>
+        <article className="price-cell">
+          <p className="m-0 text-xs uppercase tracking-[0.16em] text-slate-400">Target price</p>
+          <p className="mt-2 text-3xl font-black text-white">{Number.isFinite(targetPrice) ? `$${targetPrice.toLocaleString()}` : 'Unavailable'}</p>
         </article>
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">Leverage points</p>
-          <ul className="mt-4 space-y-3 text-sm text-slate-300">
-            {strategy.leverage_points.map((point) => (
-              <li key={point} className="flex gap-3">
-                <span className="mt-1 h-2 w-2 rounded-full bg-cyan-400" />
-                <span>{point}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">Dealer email script</p>
-          <pre className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-200">
-            {strategy.email_script_to_dealer}
-          </pre>
-        </div>
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <article className="price-cell">
+          <h4 className="m-0 text-sm font-bold uppercase tracking-[0.15em] text-slate-300">Leverage points</h4>
+          {leveragePoints.length ? (
+            <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
+              {leveragePoints.map((point, index) => <li key={`${point}-${index}`} className="flex gap-3"><span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-cyan-400" /><span>{point}</span></li>)}
+            </ul>
+          ) : <p className="mt-3 text-sm text-slate-400">No leverage points were returned.</p>}
+        </article>
+        <article className="price-cell">
+          <h4 className="m-0 text-sm font-bold uppercase tracking-[0.15em] text-slate-300">Dealer email script</h4>
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-200">{strategy.email_script_to_dealer || 'No email script was returned.'}</p>
+        </article>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">In-person tactic</p>
-        <p className="mt-4 text-sm leading-7 text-slate-200">{strategy.in_person_negotiation_tactic}</p>
-      </div>
-    </div>
-  );
+      <article className="price-cell mt-4">
+        <h4 className="m-0 text-sm font-bold uppercase tracking-[0.15em] text-slate-300">In-person tactic</h4>
+        <p className="mt-3 text-sm leading-6 text-slate-200">{strategy.in_person_negotiation_tactic || 'No in-person tactic was returned.'}</p>
+      </article>
+    </Card>
+  )
 }

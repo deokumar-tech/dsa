@@ -1,16 +1,39 @@
-# React + Vite
+# CarCollective client
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The client is a React 19 and Vite application. React Router handles the Home,
+Dashboard, Dealers, authentication, and cohort workspace routes. The responsive
+dark theme and interaction animations are implemented with CSS and Tailwind
+utilities; no additional UI dependencies are required.
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+From this directory:
 
-## React Compiler
+```powershell
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Vite starts at `http://localhost:5173/`. For local development, leave
+`VITE_API_BASE_URL` blank in `.env`; `vite.config.js` proxies `/api` requests to
+the Express server at `http://localhost:3000`. To use a deployed API, set
+`VITE_API_BASE_URL` to its origin, for example
+`https://carcollective-api.onrender.com`.
 
-## Expanding the Oxlint configuration
+The browser client only needs the Render API URL. Never put Supabase database
+credentials or the Supabase service-role key in the frontend environment.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Routes
+
+- `/` — landing page and active buyer groups
+- `/dashboard` — vehicle search, cohorts, dealer listings, and negotiation AI
+- `/dealers` — local inventory, radius filter, and savings estimate
+- `/register` and `/login` — account registration and sign-in
+- `/cohort/:id` — buyer group workspace
+
+## Validation
+
+```powershell
+npm run build
+npm run lint
+```
