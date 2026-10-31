@@ -20,6 +20,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 const allowedOrigins = new Set(
   [
+    'https://dsa-gray-nine.vercel.app',
     'http://localhost:5173',
     'http://localhost:4173',
     ...(process.env.FRONTEND_URLS || '').split(','),
@@ -84,7 +85,7 @@ app.use((error, _req, res, next) => {
   const status = isJsonError ? 400 : 500;
   const code = isJsonError ? 'INVALID_JSON' : 'INTERNAL_ERROR';
   const message = isJsonError ? 'Request body must contain valid JSON.' : 'The API could not complete this request.';
-  if (status === 500) console.error('Unhandled API request error.');
+  if (status === 500) console.error('Unhandled API request error:', error);
   return res.status(status).json({ error: { code, message } });
 });
 
