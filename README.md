@@ -48,11 +48,11 @@ Render supplies `PORT`; the health check is `/api/health`. Keep all Supabase key
 ## Deploy the client to Vercel
 
 1. Import the repository in Vercel and set the **Root Directory** to `frontend`.
-2. Set `VITE_API_BASE_URL` to the Render API origin, for example `https://carcollective-api.onrender.com` (see `frontend/.env.production.example`).
-3. Deploy. `vercel.json` supports client-side route refreshes.
-4. Add the exact Vercel origin(s) to Render's `FRONTEND_URLS`, then redeploy the API.
+2. No Vercel API URL environment variable is required. `vercel.json` proxies `/api/*` requests to the Render backend so browser requests stay same-origin.
+3. Deploy. `vercel.json` also supports client-side route refreshes.
+4. If calling the Render API directly from another browser origin, add that origin to Render's `FRONTEND_URLS`.
 
-Do not set `SUPABASE_SERVICE_ROLE_KEY` or the database URL in Vercel. The Vercel client only needs the Render API URL.
+Do not set `SUPABASE_SERVICE_ROLE_KEY` or the database URL in Vercel. The Vercel client communicates with the Render API through the configured rewrite.
 
 ## Local development
 

@@ -22,6 +22,6 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: FRONTEND_URLS
-        sync: false
+        value: https://dsa-gray-nine.vercel.app
       - key: GEMINI_API_KEY
         sync: false
