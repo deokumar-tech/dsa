@@ -1,87 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { apiUrl } from '../lib/api'
-import { Badge, Button, Card, EmptyState, Modal, ProgressBar, Reveal, Toast } from '../components/ui'
+import { apiNetworkError, apiUrl, parseApiResponse } from '../lib/api'
+import { Badge, Button, Card, EmptyState, Modal, ProgressBar, Reveal, Skeleton, Toast } from '../components/ui'
 
-const sampleCohorts = {
-  'cohort-1': {
-    id: 'cohort-1',
-    target_make: 'Toyota',
-    target_model: 'RAV4 Hybrid',
-    zip_code: '94105',
-    max_members: 10,
-    member_count: 5,
-    target_discount: '12.4%',
-    urgency: 'Ready now',
-    members: [
-      { name: 'Alicia Morgan', status: 'Ready' },
-      { name: 'Marcus Chen', status: 'Ready' },
-      { name: 'Priya Shah', status: 'Ready' },
-      { name: 'Derek Johnson', status: 'Pending' },
-      { name: 'Sam Rivera', status: 'Invited' },
-    ],
-  },
-  'cohort-2': {
-    id: 'cohort-2',
-    target_make: 'Tesla',
-    target_model: 'Model Y',
-    zip_code: '94103',
-    max_members: 5,
-    member_count: 3,
-    target_discount: '9.8%',
-    urgency: 'Next 30 days',
-    members: [
-      { name: 'Jamie Park', status: 'Ready' },
-      { name: 'Taylor Reed', status: 'Ready' },
-      { name: 'Morgan Lee', status: 'Pending' },
-    ],
-  },
-  'cohort-3': {
-    id: 'cohort-3',
-    target_make: 'Honda',
-    target_model: 'CR-V Hybrid',
-    zip_code: '94105',
-    max_members: 10,
-    member_count: 7,
-    target_discount: '10.2%',
-    urgency: 'Ready now',
-    members: [
-      { name: 'Noah Kim', status: 'Ready' },
-      { name: 'Sofia Martinez', status: 'Ready' },
-      { name: 'Ethan Brooks', status: 'Ready' },
-      { name: 'Mia Patel', status: 'Ready' },
-      { name: 'Liam Foster', status: 'Ready' },
-      { name: 'Ava Chen', status: 'Pending' },
-      { name: 'Lucas Brown', status: 'Invited' },
-    ],
-  },
-  'cohort-4': {
-    id: 'cohort-4',
-    target_make: 'Ford',
-    target_model: 'Mustang',
-    zip_code: '78701',
-    max_members: 8,
-    member_count: 4,
-    target_discount: '8.6%',
-    urgency: 'Next 30 days',
-    members: [
-      { name: 'Alex Taylor', status: 'Ready' },
-      { name: 'Jordan Ellis', status: 'Ready' },
-      { name: 'Casey White', status: 'Pending' },
-      { name: 'Riley Green', status: 'Invited' },
-    ],
-  },
-}
-
-function getSampleCohort(id) {
-  return Object.prototype.hasOwnProperty.call(sampleCohorts, id) ? sampleCohorts[id] : null
-}
-
-const updateTemplates = [
-  { icon: '✦', title: 'Buyer group opened', message: 'Your local buying group is ready to welcome more drivers.', minutesAgo: 2880 },
-  { icon: '✓', title: 'Members confirmed interest', message: 'Buyers are sharing timelines and getting ready to compare dealer offers.', minutesAgo: 840 },
-  { icon: '↗', title: 'Negotiation target set', message: 'The group is aligning on a shared target before contacting showrooms.', minutesAgo: 95 },
-]
+const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
 
 function readToken() {
   try {
@@ -91,29 +13,8 @@ function readToken() {
   }
 }
 
-function parseResponse(response) {
-  return response.json().catch(() => ({})).then((payload) => {
-    if (!response.ok) throw new Error(payload.message || 'The cohort could not be loaded.')
-    return payload
-  })
-}
-
-function relativeTime(minutesAgo) {
-  if (minutesAgo < 60) return `${minutesAgo} min ago`
-  const hours = Math.floor(minutesAgo / 60)
-  if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`
-  const days = Math.floor(hours / 24)
-  return `${days} day${days === 1 ? '' : 's'} ago`
-}
-
-function statusTone(status) {
-  if (status === 'Ready') return 'success'
-  if (status === 'Invited') return 'neutral'
-  return 'warning'
-}
-
 function initials(name) {
-  return String(name || 'Buyer')
+  return String(name || '')
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part[0] || '')
@@ -121,11 +22,32 @@ function initials(name) {
     .toUpperCase()
 }
 
-function membersFromCount(count) {
-  return Array.from({ length: Math.max(0, count) }, (_, index) => ({
-    name: `Buyer ${index + 1}`,
-    status: index < Math.ceil(count * 0.6) ? 'Ready' : 'Pending',
-  }))
+function statusTone(status) {
+  if (status === 'Ready') return 'success'
+  if (status === 'Invited') return 'neutral'
+  if (status === 'Pending') return 'warning'
+  return 'neutral'
+}
+
+function relativeTime(value) {
+  const timestamp = new Date(value).getTime()
+  if (!Number.isFinite(timestamp)) return 'Time unavailable'
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000))
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hr ago`
+  const days = Math.floor(hours / 24)
+  return days < 30 ? `${days} days ago` : new Date(value).toLocaleDateString('en-IN')
+}
+
+function deadlineLabel(value) {
+  if (!value) return null
+  const deadline = new Date(`${String(value).slice(0, 10)}T23:59:59`)
+  if (Number.isNaN(deadline.getTime())) return null
+  const remaining = Math.ceil((deadline.getTime() - Date.now()) / 86400000)
+  if (remaining < 0) return 'Deadline passed'
+  return remaining === 0 ? 'Deadline today' : `${remaining} days left`
 }
 
 async function copyText(text) {
@@ -150,6 +72,7 @@ export default function CohortPage() {
   const [cohort, setCohort] = useState(null)
   const [loadedId, setLoadedId] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [reload, setReload] = useState(0)
   const [joinOpen, setJoinOpen] = useState(false)
   const [joining, setJoining] = useState(false)
   const [toast, setToast] = useState('')
@@ -162,44 +85,30 @@ export default function CohortPage() {
 
     async function loadCohort() {
       try {
-        const response = await fetch(apiUrl('/api/cohorts'), { signal: controller.signal })
-        const records = await parseResponse(response)
-        const match = Array.isArray(records) ? records.find((item) => String(item.id) === id) : null
-        const sample = getSampleCohort(id)
-
-        if (match || sample) {
-          const record = match || sample
-          const count = Number(record.member_count ?? record.members?.length ?? sample?.member_count ?? 0)
-          const sampleMembers = sample?.members ? sample.members.slice(0, count) : null
-          const recordMembers = Array.isArray(record.members)
-            && record.members.every((member) => member && typeof member === 'object' && typeof member.name === 'string')
-            ? record.members
-            : null
-          const members = recordMembers || sampleMembers || membersFromCount(count)
-          setCohort({ ...sample, ...record, members, member_count: count })
-        } else {
-          setCohort(null)
-        }
+        const response = await fetch(apiUrl(`/api/cohorts/${encodeURIComponent(id)}`), { signal: controller.signal })
+        const record = await parseApiResponse(response, 'The cohort could not be loaded.')
+        if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('The API returned an unexpected cohort response.')
+        setCohort(record)
         setLoadError('')
       } catch (error) {
         if (error.name !== 'AbortError') {
-          setLoadError(error.message || 'Unable to load this cohort.')
-          const sample = getSampleCohort(id)
-          if (sample) setCohort(sample)
-          else setCohort(null)
+          setCohort(null)
+          setLoadError(error.status === 404 ? '' : apiNetworkError(error, 'Unable to load this cohort.').message)
         }
       } finally {
         if (!controller.signal.aborted) setLoadedId(id)
       }
     }
 
-    loadCohort()
+    void loadCohort()
     return () => controller.abort()
-  }, [id])
+  }, [id, reload])
 
-  const members = cohort?.members || []
-  const readyCount = members.filter((member) => member.status === 'Ready').length
-  const progress = cohort?.max_members ? (Number(cohort.member_count || members.length) / cohort.max_members) * 100 : 0
+  const members = Array.isArray(cohort?.members) ? cohort.members : []
+  const memberProfiles = members.filter((member) => member && typeof member === 'object' && typeof member.name === 'string')
+  const memberCount = Number(cohort?.member_count ?? members.length)
+  const target = Number(cohort?.target_size ?? cohort?.max_members) || 0
+  const progress = target ? (memberCount / target) * 100 : 0
   const loading = loadedId !== id
 
   const handleInvite = async () => {
@@ -227,19 +136,17 @@ export default function CohortPage() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      const payload = await parseResponse(response)
-      const joinedCount = Number(payload.member_count ?? Number(cohort.member_count || 0) + 1)
-      const alreadyJoined = joinedCount <= Number(cohort.member_count || 0)
-      const updatedMembers = alreadyJoined || cohort.members.some((member) => member.name === 'You')
-        ? cohort.members
-        : [...cohort.members, { name: 'You', status: 'Ready' }]
-      setCohort((current) => ({ ...current, ...payload, member_count: joinedCount, members: updatedMembers }))
+      const payload = await parseApiResponse(response)
+      const joinedCount = Number(payload.member_count ?? memberCount + 1)
+      const detailsResponse = await fetch(apiUrl(`/api/cohorts/${encodeURIComponent(cohort.id)}`))
+      const details = await parseApiResponse(detailsResponse)
+      setCohort((current) => current ? { ...current, ...details, ...payload, member_count: joinedCount } : current)
       closeJoin()
       setToastTone('default')
       setToast('You joined the cohort successfully.')
     } catch (error) {
       setToastTone('error')
-      setToast(error.message || 'Unable to join this cohort.')
+      setToast(apiNetworkError(error).message)
     } finally {
       setJoining(false)
     }
@@ -248,12 +155,9 @@ export default function CohortPage() {
   if (loading) {
     return (
       <main className="page-main page-enter" aria-live="polite">
-        <div className="skeleton h-4 w-36" />
-        <div className="skeleton mt-4 h-12 w-2/3" />
-        <div className="mt-8 grid gap-5 lg:grid-cols-2">
-          <div className="skeleton h-72" />
-          <div className="skeleton h-72" />
-        </div>
+        <Skeleton className="h-4 w-36" />
+        <Skeleton className="mt-4 h-12 w-2/3" />
+        <div className="mt-8 grid gap-5 lg:grid-cols-2"><Skeleton className="h-72" /><Skeleton className="h-72" /></div>
       </main>
     )
   }
@@ -263,90 +167,104 @@ export default function CohortPage() {
       <main className="page-main page-enter">
         <EmptyState
           icon="car"
-          title="Cohort not found"
-          message={loadError ? `We couldn't load this cohort. ${loadError}` : 'This cohort link may be incorrect or the group may no longer be active.'}
-          action={<Link className="button button-ghost mt-2" to="/dashboard">Back to dashboard</Link>}
+          title={loadError ? 'Couldn’t load cohort' : 'Cohort not found'}
+          message={loadError || 'This cohort link may be incorrect or the group may no longer be active.'}
+          action={loadError
+            ? <Button type="button" onClick={() => setReload((count) => count + 1)}>Retry</Button>
+            : <Link className="button button-ghost mt-2" to="/dashboard">Back to dashboard</Link>}
         />
       </main>
     )
   }
 
+  const vehicleName = [cohort.target_make, cohort.target_model].filter(Boolean).join(' ')
+  const locationName = [cohort.locality, cohort.city || 'Bhubaneswar'].filter(Boolean).join(', ')
+  const estimatedPrice = Number(cohort.estimated_group_price_inr)
+  const deadline = deadlineLabel(cohort.deadline)
+  const updates = Array.isArray(cohort.updates) ? cohort.updates : []
+
   return (
     <main className="page-main page-enter">
-      <Reveal as="section">
-        <p className="eyebrow m-0">Buyer workspace · {cohort.zip_code || 'Local area'}</p>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-5">
+      <Reveal as="section" className="ed-cohort-hero">
+        <p className="eyebrow">Buyer workspace · {locationName}{cohort.pincode ? ` · PIN ${cohort.pincode}` : ''}</p>
+        <div className="ed-cohort-heading">
           <div>
-            <h1 className="m-0 text-4xl font-black tracking-tight text-white md:text-5xl">
-              {cohort.target_make} {cohort.target_model} Cohort
-            </h1>
-            <p className="mt-3 text-slate-400">A local group working toward a stronger offer together.</p>
+            <h1>{vehicleName || 'Vehicle'} <span className="ed-serif">cohort</span></h1>
+            <p>A local group comparing showroom offers and building a shared buying target.</p>
           </div>
           <div className="cohort-actions mt-0">
             <Button type="button" variant="ghost" onClick={handleInvite}>↗ Invite a buyer</Button>
             <Button type="button" onClick={() => setJoinOpen(true)}>Join this cohort</Button>
           </div>
         </div>
+        {deadline && <Badge tone={deadline === 'Deadline passed' ? 'warning' : 'neutral'}>{deadline}</Badge>}
 
-        <Card className="mt-7 p-5 md:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="eyebrow m-0">Group target</p>
-              <p className="mt-2 text-lg font-bold text-white">{cohort.target_discount || '12.5%'} target discount · {cohort.urgency || 'Ready now'}</p>
-            </div>
-            <p className="m-0 text-sm text-slate-300">{cohort.member_count || members.length} of {cohort.max_members || 10} buyers joined</p>
+        <Card className="ed-cohort-target">
+          <div className="ed-target-copy">
+            <p className="eyebrow">Group target</p>
+            <p>{cohort.target_discount ? `${cohort.target_discount} target discount` : 'Shared buying goal'}{cohort.urgency ? ` · ${cohort.urgency}` : ''}</p>
           </div>
-          <ProgressBar value={progress} label={`${cohort.member_count || members.length} of ${cohort.max_members || 10} buyers joined`} className="mt-4" />
-          <p className="mt-3 text-xs text-slate-400">{readyCount} {readyCount === 1 ? 'buyer is' : 'buyers are'} ready to move forward</p>
+          <p className="ed-target-count">{target ? `${memberCount} of ${target} buyers joined` : `${memberCount} buyers joined`}</p>
+          {target > 0 && <ProgressBar value={progress} label={`${memberCount} of ${target} buyers joined`} className="ed-work-progress" />}
+          {Number.isFinite(estimatedPrice) && estimatedPrice > 0 && (
+            <div className="ed-estimate-panel">
+              <p>Estimated group ex-showroom price</p>
+              <strong>{inr.format(estimatedPrice)}</strong>
+              <span>{Number(cohort.group_discount_pct) || 0}% group tier discount{cohort.group_discount_min_members ? ` at ${cohort.group_discount_min_members}+ buyers` : ' not reached yet'}. Estimated only; not a guaranteed dealer quote.</span>
+            </div>
+          )}
+          {cohort.best_nearby_showroom_name && (
+            <p className="ed-muted">Nearest available offer: {cohort.best_nearby_showroom_name}{cohort.best_nearby_showroom_locality ? `, ${cohort.best_nearby_showroom_locality}` : ''}{cohort.best_nearby_showroom_distanceKm != null ? ` · ${Number(cohort.best_nearby_showroom_distanceKm).toFixed(1)} km` : ''}.</p>
+          )}
+          {cohort.is_demo && <Badge tone="neutral">Demo data · illustrative estimates</Badge>}
         </Card>
       </Reveal>
 
-      <Reveal as="div" className="cohort-workspace-grid section-block">
-        <Card className="p-5 md:p-6">
-          <p className="eyebrow m-0">Latest activity</p>
-          <h2 className="section-heading">Member updates</h2>
-          <ol className="timeline">
-            {updateTemplates.map((update) => (
-              <li key={update.title} className="timeline-item">
-                <span className="timeline-marker" aria-hidden="true">{update.icon}</span>
-                <div className="min-w-0 pb-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="m-0 text-sm font-bold text-white">{update.title}</h3>
-                    <time className="text-xs text-slate-500">{relativeTime(update.minutesAgo)}</time>
+      <div className="cohort-workspace-grid section-block">
+        <Reveal>
+          <Card className="ed-content-card">
+            <p className="eyebrow">Latest activity</p>
+            <h2 className="section-heading">Member updates</h2>
+            {updates.length ? (
+              <ol className="ed-activity-timeline">
+                {updates.map((update) => (
+                  <li key={update.id}>
+                    <span className="ed-timeline-dot" aria-hidden="true" />
+                    <div><p>{update.label}</p><time dateTime={update.created_at}>{relativeTime(update.created_at)}</time></div>
+                  </li>
+                ))}
+              </ol>
+            ) : <div className="ed-activity-empty"><span aria-hidden="true" /><p>No recorded activity is available yet.</p></div>}
+          </Card>
+        </Reveal>
+
+        <Reveal>
+          <Card className="ed-content-card">
+            <div className="ed-members-heading">
+              <div><p className="eyebrow">The buying group</p><h2 className="section-heading">Members</h2></div>
+              <Badge tone="success">{memberCount} joined</Badge>
+            </div>
+            {memberProfiles.length ? (
+              <div className="ed-member-list">
+                {memberProfiles.map((member, index) => (
+                  <div key={member.id || `${member.name}-${index}`} className="member-row">
+                    <span className="avatar" aria-hidden="true">{initials(member.name)}</span>
+                    <span className="ed-member-name">{member.name}</span>
+                    <Badge tone={statusTone(member.status)}>{member.status || 'Status unavailable'}</Badge>
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">{update.message}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </Card>
-
-        <Card className="p-5 md:p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="eyebrow m-0">The buying group</p>
-              <h2 className="section-heading">Members</h2>
-            </div>
-            <Badge tone="success">{readyCount} ready</Badge>
-          </div>
-          <div className="mt-4">
-            {members.length ? members.map((member, index) => (
-              <div key={`${member.name}-${index}`} className="member-row">
-                <span className="avatar" aria-hidden="true">{initials(member.name)}</span>
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-200">{member.name}</span>
-                <Badge tone={statusTone(member.status)}>{member.status}</Badge>
+                ))}
               </div>
-            )) : (
-              <p className="text-sm text-slate-400">You can be the first buyer to join this cohort.</p>
+            ) : (
+              <p className="ed-muted">{memberCount > 0 ? `${memberCount} buyers have joined. Names are not collected by this service.` : 'No members have joined this cohort yet.'}</p>
             )}
-          </div>
-        </Card>
-      </Reveal>
+          </Card>
+        </Reveal>
+      </div>
 
       {joinOpen && (
-        <Modal title={`Join ${cohort.target_make} ${cohort.target_model}`} description="Confirm to join the group and help move the shared buying target forward." onClose={closeJoin}>
+        <Modal title={`Join ${vehicleName || 'this cohort'}`} description="Confirm to join the group and help move the shared buying target forward." onClose={closeJoin}>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="m-0 text-sm text-slate-300">{cohort.member_count || members.length} of {cohort.max_members || 10} buyers are currently in the group.</p>
+            <p className="m-0 text-sm text-slate-300">{target ? `${memberCount} of ${target} buyers are currently in the group.` : `${memberCount} buyers are currently in the group.`}</p>
             {readToken() ? (
               <Button type="button" disabled={joining} onClick={handleJoin}>{joining ? 'Joining…' : 'Confirm and join'}</Button>
             ) : (

@@ -1,5 +1,11 @@
 import { Button, Card, Skeleton } from './ui'
 
+const inr = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0,
+})
+
 function StrategyLoading() {
   return (
     <Card className="p-6" aria-live="polite">
@@ -49,7 +55,7 @@ export default function AiStrategyPanel({ strategy, loading, error, onGenerate }
         </article>
         <article className="price-cell">
           <p className="m-0 text-xs uppercase tracking-[0.16em] text-slate-400">Target price</p>
-          <p className="mt-2 text-3xl font-black text-white">{Number.isFinite(targetPrice) ? `$${targetPrice.toLocaleString()}` : 'Unavailable'}</p>
+          <p className="mt-2 text-3xl font-black text-white">{Number.isFinite(targetPrice) ? inr.format(targetPrice) : 'Unavailable'}</p>
         </article>
       </div>
 
@@ -58,7 +64,7 @@ export default function AiStrategyPanel({ strategy, loading, error, onGenerate }
           <h4 className="m-0 text-sm font-bold uppercase tracking-[0.15em] text-slate-300">Leverage points</h4>
           {leveragePoints.length ? (
             <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
-              {leveragePoints.map((point, index) => <li key={`${point}-${index}`} className="flex gap-3"><span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-cyan-400" /><span>{point}</span></li>)}
+              {leveragePoints.map((point, index) => <li key={`${point}-${index}`} className="flex gap-3"><span className="ed-list-dot mt-2 h-2 w-2 shrink-0 rounded-full" /><span>{point}</span></li>)}
             </ul>
           ) : <p className="mt-3 text-sm text-slate-400">No leverage points were returned.</p>}
         </article>

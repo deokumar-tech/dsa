@@ -3,14 +3,17 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const { z } = require('zod');
 const { initDatabase, databaseConfigured } = require('./config/db');
 const { assertSupabaseConfigured, supabaseConfigured } = require('./config/supabase');
 const authRoutes = require('./routes/auth');
 const inventoryRoutes = require('./routes/inventory');
 const cohortRoutes = require('./routes/cohorts');
+const showroomRoutes = require('./routes/showrooms');
+const offerRoutes = require('./routes/offers');
+const vehicleRoutes = require('./routes/vehicles');
 const { requireAuth } = require('./middleware/auth');
 const { generateNegotiationStrategy } = require('./services/ai');
+const { aiRequestSchema } = require('./schemas');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -35,7 +38,7 @@ app.use(
     },
   }),
 );
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -47,6 +50,9 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/cohorts', cohortRoutes);
+app.use('/api/showrooms', showroomRoutes);
+app.use('/api/offers', offerRoutes);
+app.use('/api/vehicles', vehicleRoutes);
 
 const strategyLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -58,30 +64,28 @@ const strategyLimiter = rateLimit({
 
 app.post('/api/ai/negotiation-strategy', requireAuth, strategyLimiter, async (req, res) => {
   try {
-    const payload = z
-      .object({
-        group_size: z.number().int().min(1),
-        zip_code: z.string().trim().regex(/^\d{5}$/),
-        year: z.number().int().min(1900).max(2100),
-        make: z.string().trim().min(1),
-        model: z.string().trim().min(1),
-        listed_price: z.number().min(0),
-        msrp: z.number().min(0),
-      })
-      .parse(req.body);
+    const payload = aiRequestSchema.parse(req.body);
 
     const strategy = await generateNegotiationStrategy(payload);
     return res.status(200).json(strategy);
   } catch (error) {
     if (error.name === 'ZodError') {
-      return res.status(400).json({ message: error.issues[0].message });
+      return res.status(400).json({ error: { code: 'INVALID_INPUT', message: error.issues[0].message } });
     }
 
-    return res.status(500).json({
-      message: 'Unable to generate negotiation strategy.',
-      details: error.message,
-    });
+    console.error('Unable to generate negotiation strategy.');
+    return res.status(500).json({ error: { code: 'AI_STRATEGY_FAILED', message: 'Unable to generate negotiation strategy.' } });
   }
+});
+
+app.use((error, _req, res, next) => {
+  if (res.headersSent) return next(error);
+  const isJsonError = error instanceof SyntaxError && error.status === 400 && 'body' in error;
+  const status = isJsonError ? 400 : 500;
+  const code = isJsonError ? 'INVALID_JSON' : 'INTERNAL_ERROR';
+  const message = isJsonError ? 'Request body must contain valid JSON.' : 'The API could not complete this request.';
+  if (status === 500) console.error('Unhandled API request error.');
+  return res.status(status).json({ error: { code, message } });
 });
 
 async function startServer() {

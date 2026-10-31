@@ -4,42 +4,25 @@ import VehicleSelector from '../components/VehicleSelector'
 import DealerPriceCard from '../components/DealerPriceCard'
 import CohortList from '../components/CohortList'
 import AiStrategyPanel from '../components/AiStrategyPanel'
-import { apiUrl } from '../lib/api'
+import { apiNetworkError, apiUrl, parseApiResponse } from '../lib/api'
 import { Button, Card, EmptyState, Modal, Reveal, Skeleton, Toast } from '../components/ui'
+import { DEFAULT_PINCODE } from '../lib/bhubaneswar'
 
 const defaultVehicle = {
-  year: 2024,
-  make: 'Toyota',
-  model: 'RAV4 Hybrid',
-  zipCode: '94105',
+  year: undefined,
+  make: '',
+  model: '',
+  vehicleId: '',
+  pincode: DEFAULT_PINCODE,
+  location: null,
 }
-
-const sampleCohorts = [
-  { id: 'cohort-1', target_make: 'Toyota', target_model: 'RAV4 Hybrid', zip_code: '94105', status: 'forming', max_members: 10, urgency: 'Ready now', member_count: 5, target_discount: '12.4%' },
-  { id: 'cohort-2', target_make: 'Tesla', target_model: 'Model Y', zip_code: '94103', status: 'forming', max_members: 5, urgency: 'Next 30 days', member_count: 3, target_discount: '9.8%' },
-  { id: 'cohort-3', target_make: 'Honda', target_model: 'CR-V Hybrid', zip_code: '94105', status: 'forming', max_members: 10, urgency: 'Ready now', member_count: 7, target_discount: '10.2%' },
-  { id: 'cohort-4', target_make: 'Ford', target_model: 'Mustang', zip_code: '78701', status: 'forming', max_members: 8, urgency: 'Next 30 days', member_count: 4, target_discount: '8.6%' },
-]
-
-const sampleInventory = [
-  { id: 'inv-1', year: 2024, make: 'Toyota', model: 'RAV4 Hybrid', trim: 'XLE AWD', listed_price: 38950, msrp: 41500, dealership: { name: 'North Bay Toyota', address: '2500 Van Ness Ave, San Francisco, CA', zip_code: '94109' } },
-  { id: 'inv-2', year: 2024, make: 'Toyota', model: 'RAV4 Hybrid', trim: 'Limited AWD', listed_price: 41500, msrp: 43800, dealership: { name: 'Mission Motors', address: '915 Mission St, San Francisco, CA', zip_code: '94103' } },
-]
 
 const defaultCohortForm = {
-  make: 'Toyota',
-  model: 'RAV4 Hybrid',
-  zipCode: '94105',
+  make: '',
+  model: '',
+  pincode: DEFAULT_PINCODE,
   maxMembers: '10',
   urgency: 'Ready now',
-}
-
-const cohortModels = {
-  Toyota: ['RAV4 Hybrid', 'Camry', 'Corolla'],
-  Honda: ['CR-V Hybrid', 'Accord', 'Civic'],
-  Ford: ['F-150', 'Mustang', 'Explorer'],
-  BMW: ['3 Series', 'X5', 'i4'],
-  Tesla: ['Model 3', 'Model Y', 'Cybertruck'],
 }
 
 function readToken() {
@@ -50,18 +33,11 @@ function readToken() {
   }
 }
 
-function parseResponse(response) {
-  return response.json().catch(() => ({})).then((payload) => {
-    if (!response.ok) throw new Error(payload.message || 'The request could not be completed.')
-    return payload
-  })
-}
-
-function DemoSkeleton({ label = 'Loading results' }) {
+function ResultsSkeleton({ label = 'Loading results' }) {
   return (
     <div className="results-grid" role="status" aria-label={label} aria-live="polite">
       {[1, 2, 3].map((item) => (
-        <Card key={item} className="p-5">
+        <Card key={item} className="p-5 ed-skeleton-card">
           <Skeleton className="h-6 w-28" />
           <Skeleton className="mt-5 h-7 w-3/4" />
           <Skeleton className="mt-3 h-4 w-1/2" />
@@ -75,13 +51,15 @@ function DemoSkeleton({ label = 'Loading results' }) {
 
 export default function DashboardPage() {
   const [vehicle, setVehicle] = useState(defaultVehicle)
+  const [vehicles, setVehicles] = useState([])
   const [inventory, setInventory] = useState([])
   const [cohorts, setCohorts] = useState([])
   const [strategy, setStrategy] = useState(null)
   const [strategyError, setStrategyError] = useState('')
+  const [dataError, setDataError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [searching, setSearching] = useState(false)
-  const [sortBy, setSortBy] = useState('discount')
+  const [searching, setSearching] = useState(true)
+  const [sortBy, setSortBy] = useState('nearest')
   const [toast, setToast] = useState('')
   const [toastTone, setToastTone] = useState('default')
   const [createOpen, setCreateOpen] = useState(false)
@@ -91,6 +69,7 @@ export default function DashboardPage() {
   const [joining, setJoining] = useState(false)
   const controllerRef = useRef(null)
   const timerRef = useRef(null)
+  const requestIdRef = useRef(0)
 
   const showToast = useCallback((message, tone = 'default') => {
     setToast(message)
@@ -104,60 +83,68 @@ export default function DashboardPage() {
     controllerRef.current?.abort()
     const controller = new AbortController()
     controllerRef.current = controller
-    const params = new URLSearchParams({
-      make: selectedVehicle.make,
-      model: selectedVehicle.model,
-      zip: selectedVehicle.zipCode,
-    })
+    const requestId = ++requestIdRef.current
+    const params = new URLSearchParams({ pincode: selectedVehicle.pincode || DEFAULT_PINCODE, radiusKm: '25' })
+    if (selectedVehicle.make) params.set('make', selectedVehicle.make)
+    if (selectedVehicle.model) params.set('model', selectedVehicle.model)
+    if (selectedVehicle.location) {
+      params.set('lat', String(selectedVehicle.location.lat))
+      params.set('lng', String(selectedVehicle.location.lng))
+    }
+    setDataError('')
 
     try {
       const [inventoryResponse, cohortResponse] = await Promise.all([
-        fetch(apiUrl(`/api/inventory?${params.toString()}`), { signal: controller.signal }),
+        fetch(apiUrl(`/api/offers?${params.toString()}`), { signal: controller.signal }),
         fetch(apiUrl(`/api/cohorts?${params.toString()}`), { signal: controller.signal }),
       ])
       const [inventoryData, cohortData] = await Promise.all([
-        parseResponse(inventoryResponse),
-        parseResponse(cohortResponse),
+        parseApiResponse(inventoryResponse, 'Nearby offers could not be loaded.'),
+        parseApiResponse(cohortResponse, 'Nearby cohorts could not be loaded.'),
       ])
+      if (!Array.isArray(inventoryData) || !Array.isArray(cohortData)) {
+        throw new Error('The API returned an unexpected response. Please retry.')
+      }
 
-      const matchingSamples = sampleCohorts.filter((cohort) => (
-        cohort.target_make.toLowerCase() === selectedVehicle.make.toLowerCase()
-        && cohort.target_model.toLowerCase() === selectedVehicle.model.toLowerCase()
-        && cohort.zip_code.slice(0, 3) === selectedVehicle.zipCode.slice(0, 3)
-      ))
-      const nextCohorts = Array.isArray(cohortData) && cohortData.length ? cohortData : matchingSamples
-      const nextInventory = Array.isArray(inventoryData) && inventoryData.length
-        ? inventoryData
-        : selectedVehicle.make === 'Toyota' && selectedVehicle.model === 'RAV4 Hybrid' && selectedVehicle.zipCode.startsWith('941')
-          ? sampleInventory
-          : []
-
-      setInventory(nextInventory)
-      setCohorts(nextCohorts)
+      setInventory(inventoryData)
+      setCohorts(cohortData)
     } catch (error) {
-      if (error.name === 'AbortError') return
-      const matchingSamples = sampleCohorts.filter((cohort) => (
-        cohort.target_make.toLowerCase() === selectedVehicle.make.toLowerCase()
-        && cohort.target_model.toLowerCase() === selectedVehicle.model.toLowerCase()
-        && cohort.zip_code.slice(0, 3) === selectedVehicle.zipCode.slice(0, 3)
-      ))
-      const useInventorySamples = selectedVehicle.make === 'Toyota'
-        && selectedVehicle.model === 'RAV4 Hybrid'
-        && selectedVehicle.zipCode.startsWith('941')
-
-      setInventory(useInventorySamples ? sampleInventory : [])
-      setCohorts(matchingSamples)
-      showToast('Showing local sample listings while the API is unavailable.', 'error')
+      if (error.name === 'AbortError') return undefined
+      setInventory([])
+      setCohorts([])
+      setDataError(apiNetworkError(error).message)
     }
-  }, [showToast])
+    return requestId
+  }, [])
 
   useEffect(() => {
+    let active = true
     async function loadInitialData() {
-      await loadInventoryAndCohorts(defaultVehicle)
+      try {
+        const response = await fetch(apiUrl('/api/vehicles'))
+        const records = await parseApiResponse(response, 'Vehicle choices could not be loaded.')
+        if (!Array.isArray(records)) throw new Error('The API returned an unexpected vehicle list.')
+        if (!active) return
+        setVehicles(records)
+        const firstVehicle = records[0]
+        const initial = firstVehicle
+          ? { ...defaultVehicle, make: firstVehicle.make, model: firstVehicle.model, vehicleId: firstVehicle.id }
+          : defaultVehicle
+        setVehicle(initial)
+        setCohortForm((current) => ({ ...current, make: firstVehicle?.make || '', model: firstVehicle?.model || '' }))
+        const requestId = await loadInventoryAndCohorts(initial)
+        if (active && requestId === requestIdRef.current) setSearching(false)
+      } catch (error) {
+        if (active) {
+          setDataError(apiNetworkError(error).message)
+          setSearching(false)
+        }
+      }
     }
 
     void loadInitialData()
     return () => {
+      active = false
       controllerRef.current?.abort()
       window.clearTimeout(timerRef.current)
     }
@@ -165,27 +152,26 @@ export default function DashboardPage() {
 
   const handleVehicleSearch = async (nextVehicle) => {
     setVehicle(nextVehicle)
+    setCohortForm((current) => ({ ...current, make: nextVehicle.make, model: nextVehicle.model, pincode: nextVehicle.pincode }))
     setSearching(true)
-    await Promise.all([
+    const [requestId] = await Promise.all([
       loadInventoryAndCohorts(nextVehicle),
       new Promise((resolve) => {
         timerRef.current = window.setTimeout(resolve, 600)
       }),
     ])
-    setSearching(false)
+    if (requestId === requestIdRef.current) setSearching(false)
   }
 
   const sortedCohorts = useMemo(() => [...cohorts].sort((a, b) => {
     if (sortBy === 'members') return Number(b.member_count || 0) - Number(a.member_count || 0)
-    if (sortBy === 'closest') {
-      const zipA = String(a.zip_code || '')
-      const zipB = String(b.zip_code || '')
-      const exactA = zipA === vehicle.zipCode ? 0 : 1
-      const exactB = zipB === vehicle.zipCode ? 0 : 1
-      return exactA - exactB || zipA.localeCompare(zipB)
+    if (sortBy === 'discount') {
+      const savingsA = Number(a.best_nearby_offer_price_inr || 0) - Number(a.estimated_group_price_inr || 0)
+      const savingsB = Number(b.best_nearby_offer_price_inr || 0) - Number(b.estimated_group_price_inr || 0)
+      return savingsB - savingsA
     }
-    return Number.parseFloat(b.target_discount || '0') - Number.parseFloat(a.target_discount || '0')
-  }), [cohorts, sortBy, vehicle.zipCode])
+    return Number(a.distanceKm || 0) - Number(b.distanceKm || 0)
+  }), [cohorts, sortBy])
 
   const handleJoinCohort = async () => {
     const token = readToken()
@@ -200,12 +186,12 @@ export default function DashboardPage() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      await parseResponse(response)
+      await parseApiResponse(response)
       closeJoin()
       showToast('You joined the cohort successfully.')
       await loadInventoryAndCohorts(vehicle)
     } catch (error) {
-      showToast(error.message || 'Unable to join the cohort.', 'error')
+      showToast(apiNetworkError(error).message, 'error')
     } finally {
       setJoining(false)
     }
@@ -213,8 +199,8 @@ export default function DashboardPage() {
 
   const handleCreateCohort = async (event) => {
     event.preventDefault()
-    if (!/^\d{5}$/.test(cohortForm.zipCode)) {
-      showToast('Enter a valid 5-digit ZIP code.', 'error')
+    if (!/^[1-9]\d{5}$/.test(cohortForm.pincode)) {
+      showToast('Enter a valid 6-digit PIN code.', 'error')
       return
     }
     const token = readToken()
@@ -225,6 +211,7 @@ export default function DashboardPage() {
 
     setCreating(true)
     try {
+      const selectedVehicle = vehicles.find((item) => item.make === cohortForm.make && item.model === cohortForm.model)
       const response = await fetch(apiUrl('/api/cohorts'), {
         method: 'POST',
         headers: {
@@ -234,23 +221,34 @@ export default function DashboardPage() {
         body: JSON.stringify({
           target_make: cohortForm.make,
           target_model: cohortForm.model,
-          zip_code: cohortForm.zipCode,
+          zip_code: cohortForm.pincode,
+          pincode: cohortForm.pincode,
+          city: 'Bhubaneswar',
+          locality: '',
+          lat: vehicle.location?.lat,
+          lng: vehicle.location?.lng,
+          vehicle_id: selectedVehicle?.id,
+          target_size: Number(cohortForm.maxMembers),
           max_members: Number(cohortForm.maxMembers),
           urgency: cohortForm.urgency,
         }),
       })
-      await parseResponse(response)
+      await parseApiResponse(response)
       closeCreate()
-      setVehicle({ ...vehicle, make: cohortForm.make, model: cohortForm.model, zipCode: cohortForm.zipCode })
-      showToast('Your cohort is live. Invite nearby buyers to join.')
-      await loadInventoryAndCohorts({
+      const nextVehicle = {
         ...vehicle,
         make: cohortForm.make,
         model: cohortForm.model,
-        zipCode: cohortForm.zipCode,
+        vehicleId: selectedVehicle?.id || '',
+        pincode: cohortForm.pincode,
+      }
+      setVehicle(nextVehicle)
+      showToast('Your cohort is live. Group price estimates are not guaranteed dealer quotes.')
+      await loadInventoryAndCohorts({
+        ...nextVehicle,
       })
     } catch (error) {
-      showToast(error.message || 'Unable to create the cohort.', 'error')
+      showToast(apiNetworkError(error).message, 'error')
     } finally {
       setCreating(false)
     }
@@ -260,6 +258,12 @@ export default function DashboardPage() {
     const token = readToken()
     if (!token) {
       showToast('Log in before generating a negotiation strategy.', 'error')
+      return
+    }
+    if (!inventory.length) {
+      const message = 'A nearby showroom offer is needed to generate a strategy based on real prices.'
+      setStrategyError(message)
+      showToast(message, 'error')
       return
     }
 
@@ -274,19 +278,23 @@ export default function DashboardPage() {
         },
         body: JSON.stringify({
           group_size: 4,
-          zip_code: vehicle.zipCode,
+          zip_code: vehicle.pincode,
+          pincode: vehicle.pincode,
           year: vehicle.year,
           make: vehicle.make,
           model: vehicle.model,
-          listed_price: inventory[0]?.listed_price || 38950,
-          msrp: inventory[0]?.msrp || 41500,
+          listed_price: Number(inventory[0].final_price_inr),
+          msrp: Number(inventory[0].ex_showroom_price_inr),
+          dealer_discount_inr: Number(inventory[0].dealer_discount_inr),
+          showroom_name: inventory[0].showroom?.name,
+          currency: 'INR',
         }),
       })
-      const payload = await parseResponse(response)
+      const payload = await parseApiResponse(response)
       setStrategy(payload)
     } catch (error) {
-      setStrategyError(error.message || 'Strategy generation failed.')
-      showToast(error.message || 'Strategy generation failed.', 'error')
+      setStrategyError(apiNetworkError(error).message)
+      showToast(apiNetworkError(error).message, 'error')
     } finally {
       setLoading(false)
     }
@@ -297,7 +305,7 @@ export default function DashboardPage() {
       <section className="mb-9">
         <p className="eyebrow m-0">Your buying workspace</p>
         <h1 className="mt-2 text-4xl font-black tracking-tight text-white md:text-5xl">Dashboard</h1>
-        <p className="mt-3 max-w-2xl text-slate-400">Find a local group, compare showroom offers, and turn your next car search into shared leverage.</p>
+        <p className="mt-3 max-w-2xl text-slate-400">Find nearby Bhubaneswar buyers, compare submitted showroom offers, and work toward a better-informed group purchase.</p>
       </section>
 
       <Reveal>
@@ -307,32 +315,42 @@ export default function DashboardPage() {
       <Reveal as="section" className="section-block">
         <div className="results-toolbar">
           <div>
-            <p className="eyebrow m-0">Buyers near {vehicle.zipCode}</p>
+            <p className="eyebrow m-0">Buyers near PIN {vehicle.pincode}</p>
             <h2 className="section-heading">Local cohorts</h2>
-            <p className="mt-2 text-sm text-slate-400">{cohorts.length} {cohorts.length === 1 ? 'group' : 'groups'} for {vehicle.year} {vehicle.make} {vehicle.model}</p>
+            <p className="mt-2 text-sm text-slate-400">
+              {dataError ? 'Cohort data unavailable' : `${cohorts.length} ${cohorts.length === 1 ? 'group' : 'groups'} within 25 km for ${vehicle.make} ${vehicle.model}`}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="field-label flex-row items-center gap-2">
-              <span className="whitespace-nowrap">Sort by</span>
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="field-control min-w-40">
-                <option value="discount">Best discount</option>
-                <option value="closest">Closest ZIP</option>
-                <option value="members">Most members</option>
-              </select>
-            </label>
+            {cohorts.length > 0 && (
+              <label className="field-label flex-row items-center gap-2">
+                <span className="whitespace-nowrap">Sort by</span>
+                <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="field-control min-w-40">
+                  <option value="discount">Best estimated saving</option>
+                  <option value="nearest">Nearest first</option>
+                  <option value="members">Most members</option>
+                </select>
+              </label>
+            )}
             <Button type="button" variant="ghost" onClick={() => setCreateOpen(true)}>＋ Start a cohort</Button>
           </div>
         </div>
 
         {searching ? (
-          <DemoSkeleton />
+          <ResultsSkeleton />
+        ) : dataError ? (
+          <div className="ed-error-state" role="alert">
+            <h3>We couldn’t load your cohorts</h3>
+            <p>{dataError}</p>
+            <Button type="button" variant="ghost" onClick={() => handleVehicleSearch(vehicle)}>Retry</Button>
+          </div>
         ) : sortedCohorts.length ? (
           <CohortList cohorts={sortedCohorts} onJoin={setJoinCohort} />
         ) : (
           <EmptyState
             icon="car"
-            title="No cohorts match this search yet"
-            message="Start a group for your vehicle and invite nearby buyers to build negotiating power together."
+            title="No cohorts match yet"
+            message={`No nearby cohorts were found for PIN ${vehicle.pincode}. Search results use approximate coordinates and the selected distance radius. Start a cohort to invite local buyers.`}
             action={<Button type="button" onClick={() => setCreateOpen(true)}>Start a cohort</Button>}
           />
         )}
@@ -341,9 +359,14 @@ export default function DashboardPage() {
       <Reveal as="section" className="section-block">
         <div className="mb-6">
           <p className="eyebrow m-0">Inventory</p>
-          <h2 className="section-heading">Nearby dealership pricing</h2>
+          <h2 className="section-heading">Nearby showroom offers</h2>
         </div>
-        {searching ? <DemoSkeleton label="Loading inventory" /> : <DealerPriceCard listings={inventory} />}
+        {searching ? <ResultsSkeleton label="Loading offers" /> : dataError ? <p className="ed-muted" role="alert">{dataError}</p> : (
+          <>
+            <p className="ed-onroad-note">Prices are ex-showroom. On-road price varies by RTO, insurance and taxes.</p>
+            <DealerPriceCard listings={inventory} />
+          </>
+        )}
       </Reveal>
 
       <Reveal as="section" className="section-block">
@@ -364,21 +387,25 @@ export default function DashboardPage() {
               <select
                 className="field-control"
                 value={cohortForm.make}
-                onChange={(event) => setCohortForm((current) => ({ ...current, make: event.target.value, model: cohortModels[event.target.value][0] }))}
+                onChange={(event) => {
+                  const nextMake = event.target.value
+                  const nextModel = vehicles.find((item) => item.make === nextMake)?.model || ''
+                  setCohortForm((current) => ({ ...current, make: nextMake, model: nextModel }))
+                }}
               >
-                {Object.keys(cohortModels).map((make) => <option key={make} value={make}>{make}</option>)}
+                {[...new Set(vehicles.map((item) => item.make))].map((make) => <option key={make} value={make}>{make}</option>)}
               </select>
             </label>
             <label className="field-label">
               Model
               <select className="field-control" value={cohortForm.model} onChange={(event) => setCohortForm((current) => ({ ...current, model: event.target.value }))}>
-                {(cohortModels[cohortForm.make] || []).map((model) => <option key={model} value={model}>{model}</option>)}
+                {[...new Set(vehicles.filter((item) => item.make === cohortForm.make).map((item) => item.model))].map((model) => <option key={model} value={model}>{model}</option>)}
               </select>
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="field-label">
-                ZIP code
-                <input className="field-control" value={cohortForm.zipCode} inputMode="numeric" maxLength={5} onChange={(event) => setCohortForm((current) => ({ ...current, zipCode: event.target.value.replace(/\D/g, '').slice(0, 5) }))} required />
+                PIN code
+                <input className="field-control" value={cohortForm.pincode} inputMode="numeric" maxLength={6} pattern="[1-9][0-9]{5}" onChange={(event) => setCohortForm((current) => ({ ...current, pincode: event.target.value.replace(/\D/g, '').slice(0, 6) }))} required />
               </label>
               <label className="field-label">
                 Buyer goal
@@ -393,7 +420,7 @@ export default function DashboardPage() {
                 {['Ready now', 'Next 30 days', 'Exploring'].map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
-            {!readToken() && <p className="m-0 text-sm text-slate-400">You’ll need to <Link className="text-cyan-200 underline" to="/login" onClick={closeCreate}>sign in</Link> before creating a cohort.</p>}
+            {!readToken() && <p className="m-0 text-sm text-slate-400">You’ll need to <Link className="underline" to="/login" onClick={closeCreate}>sign in</Link> before creating a cohort.</p>}
             <Button type="submit" disabled={creating}>{creating ? 'Creating cohort…' : 'Create cohort'}</Button>
           </form>
         </Modal>
@@ -402,7 +429,7 @@ export default function DashboardPage() {
       {joinCohort && (
         <Modal title={`Join ${joinCohort.target_make} ${joinCohort.target_model}`} description="Confirm to join this local buyer group and be counted toward its target." onClose={closeJoin}>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="m-0 text-sm text-slate-300">{joinCohort.member_count || 0} of {joinCohort.max_members || 10} buyers are in this cohort.</p>
+            <p className="m-0 text-sm text-slate-300">{joinCohort.member_count || 0} of {joinCohort.target_size || joinCohort.max_members || 10} buyers are in this cohort.</p>
             {readToken() ? (
               <Button type="button" disabled={joining} onClick={handleJoinCohort}>{joining ? 'Joining…' : 'Confirm and join'}</Button>
             ) : (

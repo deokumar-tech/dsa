@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { pool, databaseConfigured } = require('../config/db');
 const { loginSchema, userAuthSchema } = require('../schemas');
 const { requireAuth } = require('../middleware/auth');
@@ -8,6 +9,13 @@ const { createUserRecord, findUserByEmail, findUserById } = require('../data/sto
 const { supabaseAnon, supabaseConfigured } = require('../config/supabase');
 
 const router = express.Router();
+const authWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many authentication attempts. Please try again shortly.' },
+});
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET must be configured before the auth routes are loaded.');
@@ -85,7 +93,7 @@ function loginUserMemory(payload) {
   return isValidPassword ? { user } : { user: null };
 }
 
-router.post('/register', async (req, res) => {
+router.post('/register', authWriteLimiter, async (req, res) => {
   try {
     const payload = userAuthSchema.parse(req.body);
 
@@ -182,7 +190,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', authWriteLimiter, async (req, res) => {
   try {
     const payload = loginSchema.parse(req.body);
 

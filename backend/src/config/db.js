@@ -59,10 +59,10 @@ async function initDatabase({ required = false } = {}) {
   }
 
   const projectRoot = path.resolve(__dirname, '../../../');
-  const migrationSql = fs.readFileSync(
-    path.join(projectRoot, 'supabase/migrations/20261031110000_initial_schema.sql'),
-    'utf8',
-  );
+  const migrationDirectory = path.join(projectRoot, 'supabase/migrations');
+  const migrationFiles = fs.readdirSync(migrationDirectory)
+    .filter((file) => /^\d+_.+\.sql$/.test(file))
+    .sort();
   const seedSql = fs.readFileSync(path.join(projectRoot, 'supabase/seed.sql'), 'utf8');
   let client;
   try {
@@ -106,7 +106,10 @@ async function initDatabase({ required = false } = {}) {
 
   try {
     await client.query('BEGIN');
-    await client.query(migrationSql);
+    for (const migrationFile of migrationFiles) {
+      const migrationSql = fs.readFileSync(path.join(migrationDirectory, migrationFile), 'utf8');
+      await client.query(migrationSql);
+    }
     await client.query(seedSql);
     await client.query('COMMIT');
     console.log('PostgreSQL schema is ready and seed data is loaded.');

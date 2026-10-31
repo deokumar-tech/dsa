@@ -25,7 +25,7 @@ The client sends API requests only to the Render API. Supabase credentials are c
 5. Apply the migration from the repository root with the Supabase CLI (`supabase db push`), or run `npm run db:init` from `backend` to apply the migration and seed the sample rows.
 6. In Supabase **Authentication → URL Configuration**, set the Site URL to the Vercel client URL and add your Vercel production/preview URLs plus `http://localhost:5173` to the redirect URL allowlist.
 
-The canonical schema and auth trigger are in `supabase/migrations/20261031110000_initial_schema.sql`; sample rows are in `supabase/seed.sql`. The API applies the migration and seeds automatically on startup when `DATABASE_URL` is configured. Seed rows use stable keys so repeated initialization does not duplicate them. Demo inventory is illustrative, not a live dealer feed. Supabase direct database hosts can require IPv6; for local development networks without IPv6 support, use the Session pooler URI and enable `DATABASE_SSL=true`.
+The base schema and auth trigger are in `supabase/migrations/20261031110000_initial_schema.sql`. The additive `supabase/migrations/20261101000000_bhubaneswar_showrooms.sql` migration adds the Bhubaneswar showroom, vehicle, offer, and group-discount tables plus cohort location fields and the showroom-photo bucket. The API applies ordered migrations and `supabase/seed.sql` automatically on startup when `DATABASE_URL` is configured. Seed rows use stable keys so repeated initialization does not duplicate them. Showrooms, prices, and locations marked **Demo data** are illustrative—not live dealer quotes—and must be replaced or verified before relying on them. Supabase direct database hosts can require IPv6; for local development networks without IPv6 support, use the Session pooler URI and enable `DATABASE_SSL=true`.
 
 Supabase Auth handles account registration and login. The database trigger creates each user's public profile. The API verifies bearer tokens with the Supabase service client. The anon key is used only for the public Auth sign-in/sign-up client on the backend; the service-role key is only used server-side.
 
@@ -65,13 +65,18 @@ When no Supabase/Postgres values are configured, the backend uses temporary in-m
 
 - `POST /api/auth/register` and `POST /api/auth/login`
 - `GET /api/auth/me` (bearer token required)
-- `GET /api/inventory?make=Toyota&model=RAV4%20Hybrid&zip=94105`
-- `GET /api/cohorts?make=Toyota&model=RAV4%20Hybrid&zip=94105`
+- `GET /api/vehicles` — database-backed vehicle choices
+- `GET /api/showrooms?pincode=751007&radiusKm=25` and `GET /api/showrooms/:id`
+- `GET /api/offers?pincode=751007&sort=best_discount`
+- `GET /api/cohorts?pincode=751007&radiusKm=25` and `GET /api/cohorts/:id`
+- `GET /api/inventory` remains available for existing clients
 - `POST /api/cohorts` (bearer token required)
 - `POST /api/cohorts/:id/join` (bearer token required)
+- `POST /api/showrooms` and `POST /api/offers` (bearer token required)
+- `POST /api/showrooms/:id/photo` (bearer token required; JPEG/PNG/WebP, max 2 MB)
 - `POST /api/ai/negotiation-strategy` (bearer token required and rate limited)
 
-ZIP matching currently groups ZIP codes by their first three digits; it does not calculate an exact mileage radius.
+Nearby searches accept a six-digit Indian PIN code or coordinates and a radius in kilometres (up to 100 km). PIN locality coordinates are approximate; device location can be used for distance filtering. Demo prices are stored in whole INR and represent ex-showroom figures, not on-road totals or guaranteed dealer quotes. New showroom contributions are unverified until reviewed. The browser uploads photos only through the API; Supabase Storage credentials remain server-side.
 
 ## Validation
 

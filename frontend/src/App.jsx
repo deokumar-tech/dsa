@@ -38,19 +38,28 @@ function Footer() {
   return (
     <footer className="footer">
       <div className="footer-inner">
-        <Link to="/" className="brand-lockup" aria-label="CarCollective home">
-          <span className="brand-mark" aria-hidden="true">C</span>
-          <span>
-            <span className="brand-name block">CarCollective</span>
-            <span className="brand-subtitle block">Better together</span>
-          </span>
-        </Link>
-        <nav className="footer-links" aria-label="Footer navigation">
-          <Link to="/dashboard">Find a cohort</Link>
-          <Link to="/dealers">Dealer pricing</Link>
-          <Link to="/register">Join the network</Link>
+        <div className="footer-column">
+          <Link to="/" className="brand-lockup" aria-label="CarCollective home">
+            <span className="brand-mark" aria-hidden="true">C</span>
+            <span><span className="brand-name block">CarCollective</span><span className="brand-subtitle block">Better together</span></span>
+          </Link>
+          <span className="footer-note">© {currentYear} CarCollective</span>
+        </div>
+        <nav className="footer-column" aria-label="Explore">
+          <h2>Explore</h2>
+          <Link to="/">Home</Link>
+          <Link to="/dashboard">Dashboard</Link>
         </nav>
-        <span>© {currentYear} CarCollective</span>
+        <nav className="footer-column" aria-label="Buying">
+          <h2>Buying</h2>
+          <Link to="/dealers">Dealers</Link>
+          <Link to="/cohort/cohort-1">Cohort workspace</Link>
+        </nav>
+        <nav className="footer-column" aria-label="Account">
+          <h2>Account</h2>
+          <Link to="/register">Join the collective</Link>
+          <Link to="/login">Sign in</Link>
+        </nav>
       </div>
     </footer>
   )

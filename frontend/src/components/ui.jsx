@@ -20,8 +20,8 @@ export function ProgressBar({ value = 0, label, className = '' }) {
   const safeValue = Math.max(0, Math.min(100, Number(value) || 0))
 
   return (
-    <div className={`progress-track ${className}`.trim()} role="progressbar" aria-valuenow={safeValue} aria-valuemin="0" aria-valuemax="100" aria-label={label || 'Progress'}>
-      <div className="progress-fill" style={{ width: `${safeValue}%` }} />
+    <div className={`progress-track ed-progress ${className}`.trim()} role="progressbar" aria-valuenow={safeValue} aria-valuemin="0" aria-valuemax="100" aria-label={label || 'Progress'}>
+      <div className="progress-fill" style={{ '--progress-value': `${safeValue}%` }} />
     </div>
   )
 }
@@ -63,35 +63,14 @@ export function EmptyState({ icon = 'search', title, message, action }) {
 }
 
 export function Reveal({ children, className = '', delay = 0, as: Element = 'div', ...props }) {
-  const elementRef = useRef(null)
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    const element = elementRef.current
-    if (!element || !('IntersectionObserver' in window)) {
-      setVisible(true)
-      return undefined
-    }
-
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setVisible(true)
-        observer.disconnect()
-      }
-    }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' })
-
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-
   return (
-    <Element ref={elementRef} className={`reveal ${visible ? 'is-visible' : ''} ${className}`.trim()} style={{ transitionDelay: `${delay}ms` }} {...props}>
+    <Element data-ed-reveal className={`reveal ${className}`.trim()} style={{ transitionDelay: `${delay}ms` }} {...props}>
       {children}
     </Element>
   )
 }
 
-export function AnimatedCounter({ value, suffix = '', prefix = '', duration = 1100, className = '' }) {
+export function AnimatedCounter({ value, suffix = '', prefix = '', duration = 1100, className = '', locale = 'en-US' }) {
   const ref = useRef(null)
   const [count, setCount] = useState(0)
   const numericValue = Number(value) || 0
@@ -127,7 +106,9 @@ export function AnimatedCounter({ value, suffix = '', prefix = '', duration = 11
   }, [duration, numericValue, shouldAnimate])
 
   const visibleCount = shouldAnimate ? count : numericValue
-  const formatted = Number.isInteger(numericValue) ? Math.round(visibleCount).toLocaleString() : visibleCount.toFixed(1)
+  const formatted = Number.isInteger(numericValue)
+    ? Math.round(visibleCount).toLocaleString(locale)
+    : visibleCount.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
   return <span ref={ref} className={className}>{prefix}{formatted}{suffix}</span>
 }
 
