@@ -4,22 +4,24 @@
 
 CarCollective is split into three systems:
 
-1. **Client:** React/Vite app deployed to Vercel.
-2. **API server:** Express app deployed to Render.
-3. **Database and authentication:** Supabase Postgres and Supabase Auth.
+1. **Client:** React/Vite app deployed to Vercel. It calls only the Render API.
+2. **Backend/API server:** Express app deployed to Render. It connects to Supabase and provides the API consumed by the client.
+3. **Database/auth server:** Supabase Postgres, Supabase Auth, and Storage.
 
-The client sends API requests only to the Render API. Supabase credentials are configured only on the backend; the Supabase service-role key is never sent to or built into the client.
+The client must not connect directly to Supabase. Supabase credentials are configured only on the backend; the Supabase service-role key and database URL must never be sent to or built into the client.
 
 ## Local environment files
 
 - `frontend/.env` and `frontend/.env.example` contain only `VITE_API_BASE_URL`. Leave it blank locally to use the Vite proxy, or set it to the Render API URL for a deployed client.
-- `backend/.env` and `backend/.env.example` contain the Render/API and Supabase settings. Copy the example over only if you do not already have a local env file.
+- `frontend/.env.production.example` shows the Vercel production setting. Set `VITE_API_BASE_URL` in Vercel to the deployed Render API origin.
+- `backend/.env` and `backend/.env.example` contain the backend and Supabase settings. Copy the example over only if you do not already have a local env file, then fill in the Supabase values.
+- `supabase/` contains the Supabase CLI configuration, SQL migrations, and seed data—not project secrets.
 - `backend/.env` is ignored by Git. Do not commit credentials or paste them into source files.
 
 ## Supabase setup
 
 1. Create a Supabase project.
-2. In Supabase project settings, copy the **Project URL**, **anon/public key**, and **service_role/secret key** into the matching backend variables. Never put the service-role key in the frontend.
+2. In Supabase project settings, copy the **Project URL** into backend `SUPABASE_URL`, the **anon/public key** into `SUPABASE_ANON_KEY`, and the **service_role/secret key** into `SUPABASE_SERVICE_ROLE_KEY`. The anon key is used by the backend's public Auth client; the service-role key is server-only. Never put either key in Vercel or frontend files.
 3. Copy the **Session pooler** connection string (port `5432`) into `DATABASE_URL`. Use the database password from Supabase; URL-encode special characters in the password.
 4. Set `DATABASE_SSL=true`.
 5. Apply the migration from the repository root with the Supabase CLI (`supabase db push`), or run `npm run db:init` from `backend` to apply the migration and seed the sample rows.
@@ -31,7 +33,7 @@ Supabase Auth handles account registration and login. The database trigger creat
 
 ## Deploy the API to Render
 
-The root `render.yaml` defines the backend service with `backend` as its root directory. Create the Render service from the repository Blueprint and set the secret variables in Render's environment settings:
+The root `render.yaml` defines the backend service with `backend` as its root directory. Create the Render service from the repository Blueprint and set the secret variables in Render's environment settings. Render is the production location for backend/Supabase credentials; do not upload `backend/.env` to Git:
 
 - `DATABASE_URL`
 - `SUPABASE_URL`
@@ -46,7 +48,7 @@ Render supplies `PORT`; the health check is `/api/health`. Keep all Supabase key
 ## Deploy the client to Vercel
 
 1. Import the repository in Vercel and set the **Root Directory** to `frontend`.
-2. Set `VITE_API_BASE_URL` to the Render API origin, for example `https://carcollective-api.onrender.com`.
+2. Set `VITE_API_BASE_URL` to the Render API origin, for example `https://carcollective-api.onrender.com` (see `frontend/.env.production.example`).
 3. Deploy. `vercel.json` supports client-side route refreshes.
 4. Add the exact Vercel origin(s) to Render's `FRONTEND_URLS`, then redeploy the API.
 
