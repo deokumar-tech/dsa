@@ -1,0 +1,10 @@
+project_id = "carcollective"
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[api]
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
